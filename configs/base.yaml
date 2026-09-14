@@ -1,0 +1,75 @@
+# Base configuration — shared defaults across all experiments.
+# Language-specific configs (e.g. amharic.yaml) override these values.
+
+# --- Data ---
+data:
+  raw_dir: data/raw
+  interim_dir: data/interim
+  processed_dir: data/processed
+  external_dir: data/external
+  train_split: 0.8
+  val_split: 0.1
+  test_split: 0.1
+  max_seq_len: 100          # Maximum token length; longer sequences are filtered
+  min_seq_len: 2            # Minimum token length; shorter sequences are filtered
+
+# --- Tokenization ---
+tokenization:
+  type: sentencepiece        # Options: sentencepiece | word | bpe
+  vocab_size: 8000
+  model_prefix: sp_model
+  pad_token: "<pad>"
+  unk_token: "<unk>"
+  bos_token: "<bos>"
+  eos_token: "<eos>"
+  shared_vocab: false        # Whether src and tgt share a vocabulary
+
+# --- Model ---
+model:
+  type: seq2seq              # Options: seq2seq | attention_seq2seq
+  embed_dim: 256
+  hidden_dim: 512
+  num_layers: 2
+  dropout: 0.3
+  bidirectional_encoder: true
+
+# --- Attention (used only when model.type = attention_seq2seq) ---
+attention:
+  type: bahdanau             # Options: bahdanau | luong
+  attention_dim: 256
+
+# --- Training ---
+training:
+  epochs: 30
+  batch_size: 64
+  learning_rate: 0.001
+  optimizer: adam            # Options: adam | sgd | adamw
+  lr_scheduler: reduce_on_plateau
+  lr_patience: 3
+  lr_factor: 0.5
+  clip_grad_norm: 1.0
+  teacher_forcing_ratio: 0.5
+  early_stopping_patience: 5
+  seed: 42
+  device: cuda               # Options: cuda | mps | cpu
+
+# --- Checkpointing ---
+checkpoints:
+  dir: models
+  save_best_only: true
+  monitor: val_bleu          # Metric to monitor for best checkpoint
+  mode: max
+
+# --- Logging ---
+logging:
+  level: INFO
+  log_dir: reports
+  tensorboard_dir: reports/tensorboard
+
+# --- Artifacts ---
+artifacts:
+  tokenizer_dir: artifacts/tokenizers
+  vocab_dir: artifacts/vocabularies
+  metrics_dir: artifacts/metrics
+  predictions_dir: artifacts/predictions
+  attention_dir: artifacts/attention

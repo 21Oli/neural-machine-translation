@@ -1,0 +1,67 @@
+# Experiments configuration — defines named experiment runs.
+# Each entry inherits from base.yaml and optionally amharic.yaml,
+# then applies its own overrides.
+
+experiments:
+
+  - name: baseline_seq2seq
+    description: "Vanilla seq2seq with no attention, English→Amharic"
+    base_config: configs/amharic.yaml
+    overrides:
+      model:
+        type: seq2seq
+      checkpoints:
+        dir: models/seq2seq/baseline
+      artifacts:
+        metrics_dir: artifacts/metrics/baseline_seq2seq
+        predictions_dir: artifacts/predictions/baseline_seq2seq
+
+  - name: attention_seq2seq_bahdanau
+    description: "Seq2seq + Bahdanau attention, English→Amharic"
+    base_config: configs/amharic.yaml
+    overrides:
+      model:
+        type: attention_seq2seq
+      attention:
+        type: bahdanau
+      checkpoints:
+        dir: models/attention/bahdanau
+      artifacts:
+        metrics_dir: artifacts/metrics/attention_bahdanau
+        predictions_dir: artifacts/predictions/attention_bahdanau
+        attention_dir: artifacts/attention/bahdanau
+
+  - name: attention_seq2seq_luong
+    description: "Seq2seq + Luong attention, English→Amharic"
+    base_config: configs/amharic.yaml
+    overrides:
+      model:
+        type: attention_seq2seq
+      attention:
+        type: luong
+      checkpoints:
+        dir: models/attention/luong
+      artifacts:
+        metrics_dir: artifacts/metrics/attention_luong
+        predictions_dir: artifacts/predictions/attention_luong
+        attention_dir: artifacts/attention/luong
+
+  - name: ablation_no_bidirectional
+    description: "Attention model with unidirectional encoder (ablation)"
+    base_config: configs/amharic.yaml
+    overrides:
+      model:
+        type: attention_seq2seq
+        bidirectional_encoder: false
+      checkpoints:
+        dir: models/attention/ablation_unidirectional
+
+  - name: ablation_larger_hidden
+    description: "Attention model with larger hidden dim (ablation)"
+    base_config: configs/amharic.yaml
+    overrides:
+      model:
+        type: attention_seq2seq
+        hidden_dim: 1024
+      checkpoints:
+        dir: models/attention/ablation_large_hidden
