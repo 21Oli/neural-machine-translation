@@ -1,167 +1,175 @@
-"""NMT tokenizer wrapper around SentencePiece."""
 
 from __future__ import annotations
 
-import logging
-from pathlib import Path
-from typing import List, Optional
-
-logger = logging.getLogger(__name__)
+import re
+from typing import Iterable, List
 
 
-class NMTTokenizer:
-    """SentencePiece-based tokenizer for NMT.
+PAD_TOKEN = "<PAD>"
+UNK_TOKEN = "<UNK>"
+SOS_TOKEN = "<SOS>"
+EOS_TOKEN = "<EOS>"
 
-    Supports training a new model from a corpus or loading a pre-trained one.
 
-    Args:
-        model_path: Path to a trained SentencePiece `.model` file.
+SPECIAL_TOKENS = (
+    PAD_TOKEN,
+    UNK_TOKEN,
+    SOS_TOKEN,
+    EOS_TOKEN,
+)
+
+
+WHITESPACE_RE = re.compile(r"\s+")
+
+
+class WordTokenizer:
+    """
+    Simple whitespace-based tokenizer for parallel text data.
+
+    This tokenizer intentionally preserves punctuation as part of the
+    surrounding token. For example:
+
+        "Hello, world!"
+
+    becomes:
+
+        ["Hello,", "world!"]
     """
 
-    def __init__(self, model_path: Optional[str] = None) -> None:
-        self._sp = None
-        if model_path:
-            self.load(model_path)
-
-    # ------------------------------------------------------------------
-    # Training
-    # ------------------------------------------------------------------
-
-    def train(
+    def __init__(
         self,
-        corpus_files: List[str],
-        model_prefix: str,
-        vocab_size: int = 8000,
-        character_coverage: float = 0.9995,
-        model_type: str = "bpe",
-        pad_id: int = 0,
-        unk_id: int = 1,
-        bos_id: int = 2,
-        eos_id: int = 3,
+        lowercase: bool = False,
     ) -> None:
-        """Train a SentencePiece model from a list of corpus files.
+        self.lowercase = lowercase
 
-        Args:
-            corpus_files: Paths to plain-text training files (one sentence per line).
-            model_prefix: Output prefix; writes `<prefix>.model` and `<prefix>.vocab`.
-            vocab_size: Target vocabulary size.
-            character_coverage: Coverage for character-rich scripts (use ~0.9995 for
-                Ethiopic scripts).
-            model_type: SentencePiece model type: 'bpe' | 'unigram' | 'char' | 'word'.
-            pad_id: Index reserved for <pad>.
-            unk_id: Index reserved for <unk>.
-            bos_id: Index reserved for <bos>.
-            eos_id: Index reserved for <eos>.
-        """
-        try:
-            import sentencepiece as spm
-        except ImportError as e:
-            raise ImportError("Install sentencepiece: pip install sentencepiece") from e
+    def normalize_text(self, text: str) -> str:
+        """Normalize whitespace and optionally lowercase text."""
 
-        input_str = ",".join(corpus_files)
-        logger.info(
-            "Training SentencePiece model (vocab_size=%d, type=%s)...",
-            vocab_size,
-            model_type,
-        )
-        spm.SentencePieceTrainer.train(
-            input=input_str,
-            model_prefix=model_prefix,
-            vocab_size=vocab_size,
-            character_coverage=character_coverage,
-            model_type=model_type,
-            pad_id=pad_id,
-            unk_id=unk_id,
-            bos_id=bos_id,
-            eos_id=eos_id,
-        )
-        self.load(f"{model_prefix}.model")
-        logger.info("SentencePiece model saved to %s.model", model_prefix)
+        if not isinstance(text, str):
+            raise TypeError(
+                f"Expected text to be str, got {type(text).__name__}."
+            )
 
-    # ------------------------------------------------------------------
-    # Encode / Decode
-    # ------------------------------------------------------------------
+        normalized = WHITESPACE_RE.sub(" ", text).strip()
 
-    def encode(self, text: str, add_special_tokens: bool = False) -> List[int]:
-        """Encode a string to a list of subword IDs.
+        if self.lowercase:
+            normalized = normalized.lower()
 
-        Args:
-            text: Input text.
-            add_special_tokens: Whether to prepend BOS and append EOS.
-
-        Returns:
-            List of integer IDs.
-        """
-        self._check_loaded()
-        ids: List[int] = self._sp.encode(text, out_type=int)
-        if add_special_tokens:
-            ids = [self._sp.bos_id()] + ids + [self._sp.eos_id()]
-        return ids
-
-    def decode(self, ids: List[int]) -> str:
-        """Decode a list of subword IDs back to a string.
-
-        Args:
-            ids: List of integer IDs.
-
-        Returns:
-            Decoded string.
-        """
-        self._check_loaded()
-        return self._sp.decode(ids)
+        return normalized
 
     def tokenize(self, text: str) -> List[str]:
-        """Tokenize text into subword pieces (strings).
+        """Convert a sentence into a list of word-level tokens."""
 
-        Args:
-            text: Input text.
+        normalized = self.normalize_text(text)
 
-        Returns:
-            List of subword piece strings.
-        """
-        self._check_loaded()
-        return self._sp.encode(text, out_type=str)
+        if not normalized:
+            return []
 
-    # ------------------------------------------------------------------
-    # Load / Save
-    # ------------------------------------------------------------------
+        return normalized.split(" ")
 
-    def load(self, model_path: str) -> None:
-        """Load a SentencePiece model from disk."""
-        try:
-            import sentencepiece as spm
-        except ImportError as e:
-            raise ImportError("Install sentencepiece: pip install sentencepiece") from e
+    def add_special_tokens(
+        self,
+        tokens: Iterable[str],
+    ) -> List[str]:
+        """Add sentence boundary tokens."""
 
-        self._sp = spm.SentencePieceProcessor()
-        self._sp.load(model_path)
-        logger.info("Loaded SentencePiece model from %s", model_path)
+        return [
+            SOS_TOKEN,
+            *list(tokens),
+            EOS_TOKEN,
+        ]
 
-    @property
-    def vocab_size(self) -> int:
-        self._check_loaded()
-        return self._sp.get_piece_size()
+    def tokenize_with_special_tokens(
+        self,
+        text: str,
+    ) -> List[str]:
+        """Tokenize text and add SOS/EOS tokens."""
 
-    @property
-    def pad_id(self) -> int:
-        self._check_loaded()
-        return self._sp.pad_id()
+        tokens = self.tokenize(text)
+        return self.add_special_tokens(tokens)
 
-    @property
-    def unk_id(self) -> int:
-        self._check_loaded()
-        return self._sp.unk_id()
+    def detokenize(
+        self,
+        tokens: Iterable[str],
+    ) -> str:
+        """Convert tokens back into a whitespace-separated sentence."""
 
-    @property
-    def bos_id(self) -> int:
-        self._check_loaded()
-        return self._sp.bos_id()
+        return " ".join(tokens).strip()
 
-    @property
-    def eos_id(self) -> int:
-        self._check_loaded()
-        return self._sp.eos_id()
+    def remove_special_tokens(
+        self,
+        tokens: Iterable[str],
+    ) -> List[str]:
+        """Remove SOS, EOS, and PAD tokens from a token sequence."""
 
-    def _check_loaded(self) -> None:
-        if self._sp is None:
-            raise RuntimeError("Tokenizer model not loaded. Call .train() or .load() first.")
+        removable_tokens = {
+            PAD_TOKEN,
+            SOS_TOKEN,
+            EOS_TOKEN,
+        }
+
+        return [
+            token
+            for token in tokens
+            if token not in removable_tokens
+        ]
+
+    def detokenize_without_special_tokens(
+        self,
+        tokens: Iterable[str],
+    ) -> str:
+        """Detokenize after removing special tokens."""
+
+        cleaned_tokens = self.remove_special_tokens(tokens)
+        return self.detokenize(cleaned_tokens)
+
+    def tokenize_batch(
+        self,
+        texts: Iterable[str],
+    ) -> List[List[str]]:
+        """Tokenize multiple sentences."""
+
+        return [
+            self.tokenize(text)
+            for text in texts
+        ]
+
+    def tokenize_batch_with_special_tokens(
+        self,
+        texts: Iterable[str],
+    ) -> List[List[str]]:
+        """Tokenize multiple sentences and add SOS/EOS."""
+
+        return [
+            self.tokenize_with_special_tokens(text)
+            for text in texts
+        ]
+
+
+def tokenize_text(
+    text: str,
+    lowercase: bool = False,
+) -> List[str]:
+    """Convenience function for tokenizing one sentence."""
+
+    tokenizer = WordTokenizer(lowercase=lowercase)
+    return tokenizer.tokenize(text)
+
+
+if __name__ == "__main__":
+    tokenizer = WordTokenizer()
+
+    english_example = "I love learning AI."
+    amharic_example = "እኔ አርቴፊሻል ኢንተለጀንስን መማር እወዳለሁ።"
+
+    print("English tokens:")
+    print(tokenizer.tokenize(english_example))
+
+    print("\nAmharic tokens:")
+    print(tokenizer.tokenize(amharic_example))
+
+    print("\nEnglish with special tokens:")
+    print(tokenizer.tokenize_with_special_tokens(english_example))
+
+    print("\nAmharic with special tokens:")
+    print(tokenizer.tokenize_with_special_tokens(amharic_example))

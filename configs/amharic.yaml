@@ -1,61 +1,13 @@
-# Amharic ↔ English translation configuration.
-# Overrides base.yaml defaults for this language pair.
+language:
+  source: en
+  target: am
 
-defaults:
-  - base
-
-# --- Language pair ---
-language_pair:
-  src_lang: en               # Source language code
-  tgt_lang: am               # Target language code (Amharic)
-  src_name: English
-  tgt_name: Amharic
-  direction: en-am           # en-am | am-en
-
-# --- Data ---
-data:
-  dataset_name: masakhane/mafand          # HuggingFace dataset identifier
-  subset: news-en-am
-  raw_dir: data/raw/amharic
-  interim_dir: data/interim/amharic
-  processed_dir: data/processed/amharic
-  max_seq_len: 120           # Amharic sentences can be longer
-  normalization:
-    unicode_normalize: true
-    remove_html: true
-    remove_urls: true
-    amharic_punctuation_fix: true
-
-# --- Tokenization ---
 tokenization:
-  vocab_size: 8000
-  model_prefix: am_en_sp
-  shared_vocab: false        # Separate vocabularies for Amharic and English
+  type: word
+  lowercase_source: false
+  lowercase_target: false
+  add_special_tokens: true
 
-# --- Model ---
-model:
-  type: attention_seq2seq
-  embed_dim: 256
-  hidden_dim: 512
-  num_layers: 2
-  dropout: 0.3
-
-# --- Training ---
-training:
-  epochs: 50
-  batch_size: 32             # Smaller batch due to longer Amharic sequences
-  learning_rate: 0.0005
-  early_stopping_patience: 7
-
-# --- Checkpointing ---
-checkpoints:
-  dir: models/attention
-  save_best_only: true
-
-# --- Artifacts ---
-artifacts:
-  tokenizer_dir: artifacts/tokenizers/amharic
-  vocab_dir: artifacts/vocabularies/amharic
-  metrics_dir: artifacts/metrics/amharic
-  predictions_dir: artifacts/predictions/amharic
-  attention_dir: artifacts/attention/amharic
+sequence_lengths:
+  max_src_len: 62
+  max_tgt_len: 46

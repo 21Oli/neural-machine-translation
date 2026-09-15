@@ -3,51 +3,39 @@
 import json
 import logging
 from pathlib import Path
-from typing import Tuple
 
-from .tokenizer import NMTTokenizer
+from .tokenizer import WordTokenizer
 from .vocabulary import Vocabulary
 
 logger = logging.getLogger(__name__)
 
 
-def save_tokenizer(tokenizer: NMTTokenizer, output_dir: str, name: str = "tokenizer") -> None:
-    """Save a tokenizer's metadata to a directory.
-
-    The underlying SentencePiece model file is expected to already exist
-    (created by NMTTokenizer.train()).  This function saves a JSON manifest
-    pointing to it so it can be re-loaded without extra arguments.
+def save_tokenizer(tokenizer: WordTokenizer, path: str) -> None:
+    """Save a WordTokenizer config to a JSON file.
 
     Args:
-        tokenizer: Trained NMTTokenizer instance.
-        output_dir: Directory to write the manifest into.
-        name: Basename for the manifest file.
+        tokenizer: WordTokenizer instance to save.
+        path: Destination file path (e.g. 'artifacts/tokenizers/config.json').
     """
-    out = Path(output_dir)
-    out.mkdir(parents=True, exist_ok=True)
-    manifest = {
-        "vocab_size": tokenizer.vocab_size,
-        "pad_id": tokenizer.pad_id,
-        "unk_id": tokenizer.unk_id,
-        "bos_id": tokenizer.bos_id,
-        "eos_id": tokenizer.eos_id,
-    }
-    manifest_path = out / f"{name}.json"
-    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-    logger.info("Tokenizer manifest saved to %s", manifest_path)
+    out = Path(path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    config = {"lowercase": tokenizer.lowercase}
+    out.write_text(json.dumps(config, indent=2), encoding="utf-8")
+    logger.info("Tokenizer config saved to %s", out)
 
 
-def load_tokenizer(model_path: str) -> NMTTokenizer:
-    """Load a SentencePiece-based tokenizer from a .model file.
+def load_tokenizer(path: str) -> WordTokenizer:
+    """Load a WordTokenizer from a JSON config file.
 
     Args:
-        model_path: Path to the .model file.
+        path: Path to the JSON config file.
 
     Returns:
-        Loaded NMTTokenizer instance.
+        Reconstructed WordTokenizer instance.
     """
-    tokenizer = NMTTokenizer(model_path=model_path)
-    logger.info("Tokenizer loaded from %s", model_path)
+    config = json.loads(Path(path).read_text(encoding="utf-8"))
+    tokenizer = WordTokenizer(lowercase=config.get("lowercase", False))
+    logger.info("Tokenizer loaded from %s", path)
     return tokenizer
 
 
