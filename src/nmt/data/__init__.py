@@ -4,7 +4,7 @@ from .audit import audit_dataset
 from .clean import clean_corpus
 from .download import download_dataset
 from .normalize import normalize_text
-from .split import split_dataset
+from .split import split_parallel_corpus as split_dataset
 
 __all__ = [
     "download_dataset",
