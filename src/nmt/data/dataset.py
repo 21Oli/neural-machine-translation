@@ -1,92 +1,85 @@
-"""PyTorch Dataset for parallel NMT corpora."""
-
-import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
+import pandas as pd
 import torch
-from torch.utils.data import DataLoader, Dataset
+from torch.nn.utils.rnn import pad_sequence
+from torch.utils.data import Dataset, DataLoader
 
-logger = logging.getLogger(__name__)
+
+PAD_ID = 0
+UNK_ID = 1
+SOS_ID = 2
+EOS_ID = 3
 
 
-class NMTDataset(Dataset):
-    """Parallel corpus dataset that returns (src_ids, tgt_ids) tensors.
-
-    Args:
-        src_sentences: Tokenized and encoded source sentences (list of id lists).
-        tgt_sentences: Tokenized and encoded target sentences (list of id lists).
-        src_pad_idx: Padding index for source vocabulary.
-        tgt_pad_idx: Padding index for target vocabulary.
-        max_src_len: Truncate source sequences to this length.
-        max_tgt_len: Truncate target sequences to this length.
-    """
-
+class TranslationDataset(Dataset):
     def __init__(
         self,
-        src_sentences: List[List[int]],
-        tgt_sentences: List[List[int]],
-        src_pad_idx: int = 0,
-        tgt_pad_idx: int = 0,
-        max_src_len: Optional[int] = None,
-        max_tgt_len: Optional[int] = None,
-    ) -> None:
-        assert len(src_sentences) == len(tgt_sentences)
-        self.src = src_sentences
-        self.tgt = tgt_sentences
-        self.src_pad_idx = src_pad_idx
-        self.tgt_pad_idx = tgt_pad_idx
+        dataframe,
+        tokenizer,
+        en_vocab,
+        am_vocab,
+        max_src_len=64,
+        max_tgt_len=64,
+    ):
+        self.dataframe = dataframe.reset_index(drop=True)
+        self.tokenizer = tokenizer
+        self.en_vocab = en_vocab
+        self.am_vocab = am_vocab
         self.max_src_len = max_src_len
         self.max_tgt_len = max_tgt_len
 
-    def __len__(self) -> int:
-        return len(self.src)
+    def __len__(self):
+        return len(self.dataframe)
 
-    def __getitem__(self, idx: int) -> Tuple[List[int], List[int]]:
-        src = self.src[idx]
-        tgt = self.tgt[idx]
-        if self.max_src_len:
-            src = src[: self.max_src_len]
-        if self.max_tgt_len:
-            tgt = tgt[: self.max_tgt_len]
-        return src, tgt
+    def __getitem__(self, index):
+        row = self.dataframe.iloc[index]
 
-    def collate_fn(
-        self, batch: List[Tuple[List[int], List[int]]]
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Pad a batch of (src, tgt) pairs to the same length.
+        src_tokens = self.tokenizer.tokenize(row["eng"])
+        tgt_tokens = self.tokenizer.tokenize(row["amh"])
 
-        Args:
-            batch: List of (src_ids, tgt_ids) tuples.
+        src_ids = self.en_vocab.numericalize(
+            src_tokens[: self.max_src_len - 2]
+        )
+        tgt_ids = self.am_vocab.numericalize(
+            tgt_tokens[: self.max_tgt_len - 2]
+        )
 
-        Returns:
-            Padded (src_tensor, tgt_tensor) of shape (batch_size, max_len).
-        """
-        src_batch, tgt_batch = zip(*batch)
+        src_ids = [SOS_ID] + src_ids + [EOS_ID]
+        tgt_ids = [SOS_ID] + tgt_ids + [EOS_ID]
 
-        src_padded = _pad_sequences(src_batch, self.src_pad_idx)
-        tgt_padded = _pad_sequences(tgt_batch, self.tgt_pad_idx)
-
-        return src_padded, tgt_padded
-
-    def get_dataloader(
-        self,
-        batch_size: int = 32,
-        shuffle: bool = True,
-        num_workers: int = 0,
-    ) -> DataLoader:
-        """Convenience method to create a DataLoader for this dataset."""
-        return DataLoader(
-            self,
-            batch_size=batch_size,
-            shuffle=shuffle,
-            num_workers=num_workers,
-            collate_fn=self.collate_fn,
+        return (
+            torch.tensor(src_ids, dtype=torch.long),
+            torch.tensor(tgt_ids, dtype=torch.long),
         )
 
 
-def _pad_sequences(sequences: Tuple[List[int], ...], pad_idx: int) -> torch.Tensor:
-    """Pad sequences to the same length and return as a tensor."""
-    max_len = max(len(s) for s in sequences)
-    padded = [s + [pad_idx] * (max_len - len(s)) for s in sequences]
-    return torch.tensor(padded, dtype=torch.long)
+def collate_fn(batch):
+    src_batch, tgt_batch = zip(*batch)
+
+    src_batch = pad_sequence(
+        src_batch,
+        batch_first=True,
+        padding_value=PAD_ID,
+    )
+
+    tgt_batch = pad_sequence(
+        tgt_batch,
+        batch_first=True,
+        padding_value=PAD_ID,
+    )
+
+    return src_batch, tgt_batch
+
+
+def create_dataloader(
+    dataset,
+    batch_size=64,
+    shuffle=False,
+):
+    return DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        collate_fn=collate_fn,
+    )
